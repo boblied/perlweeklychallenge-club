@@ -1,66 +1,102 @@
 #!/usr/bin/env perl
-# vim:set ts=4 sw=4 sts=4 et ai wm=0 nu syntax=perl:
+# vim:set ts=4 sw=4 sts=4 et ai wm=0 nu:
+#=============================================================================
+# Copyright (c) 2025, Bob Lied
+#=============================================================================
+# ch-1.pl Perl Weekly Challenge 068 Task 1 Zero Matrix
+#=============================================================================
+# You are given a matrix of size M x N having only 0s and 1s.
+# Write a script to set the entire row and column to 0 if an element is 0.
+# Example 1 Input: [1, 0, 1]    Output: [0, 0, 0]
+#                  [1, 1, 1]            [1, 0, 1]
+#                  [1, 1, 1]            [1, 0, 1]
+#
+# Example 2 Input: [1, 0, 1]    Output: [0, 0, 0]
+#                  [1, 1, 1]            [1, 0, 1]
+#                  [1, 0, 1]            [0, 0, 0]
+#=============================================================================
 
-use strict;
-use warnings;
-use v5.14;
+use v5.40;
 
-use Data::Dumper;
+use List::Util qw/product/;
 
-my ($M, $N) = @ARGV;
+use Getopt::Long;
+my $Verbose = false;
+my $DoTest  = false;
+my $Benchmark = 0;
 
-say "M: $M, N: $N";
-
-sub printM
+GetOptions("test" => \$DoTest, "verbose" => \$Verbose, "benchmark:i" => \$Benchmark);
+my $logger;
 {
-    my ($matrix) = @_;
-
-    say '[ ', join(',', @{$matrix->[$_]}), ' ]' for 0..scalar(@$matrix)-1;
+    use Log::Log4perl qw(:easy);
+    Log::Log4perl->easy_init({ level => ($Verbose ? $DEBUG : $INFO ),
+            layout => "%d{HH:mm:ss.SSS} %p{1} %m%n" });
+    $logger = Log::Log4perl->get_logger();
 }
+#=============================================================================
 
-# Create an MxN array randomly filled with 0 and 1
+exit(!runTest()) if $DoTest;
+exit( runBenchmark($Benchmark) ) if $Benchmark;
 
-my @Matrix;
-for my $m ( 0..$M-1 )
+say $_ for @ARGV;   # TODO command line processing here
+
+#=============================================================================
+sub zeroMatrix($matrix)
 {
-    $Matrix[$m] = [ map { int(0.9+rand()) } 1..$N ];
-}
+    my $lastRow = $matrix->$#*;
+    my $lastCol = $matrix->[0]->$#*;
 
-#say Dumper(\@Matrix);
-say "BEGIN WITH: "; printM(\@Matrix);
+    $logger->debug("DIM: $lastRow X $lastCol");
 
-my (%zeroRow, %zeroCol);
-for my $row ( 0..$M-1 )
-{
-    for my $col ( 0..$N-1 )
+    my @rowIsOne;
+    for ( 0 .. $lastRow )
     {
-        if ( $Matrix[$row][$col] == 0 )
+        $rowIsOne[$_] = product $matrix->[$_]->@*;
+    }
+
+    my @colIsOne;
+    for my $col ( 0 .. $lastCol )
+    {
+        $colIsOne[$col] = product map { $_->[$col] } $matrix->@*;
+    }
+
+    my @answer;
+    for my $row ( 0 .. $lastRow )
+    {
+        for my $col ( 0 .. $lastCol )
         {
-            $zeroRow{$row}++;
-            $zeroCol{$col}++;
+            $answer[$row][$col] = $rowIsOne[$row] & $colIsOne[$col];
         }
     }
+    return \@answer;
 }
 
-my @NewMatrix;
-for my $row ( 0..$M-1 )
+sub runTest
 {
-    if ( $zeroRow{$row} )
+    use Test2::V0;
+    my @case = ( { input  => [ [1,0,1],[1,1,1],[1,1,1] ],
+                   output => [ [0,0,0],[1,0,1],[1,0,1] ],
+                   label  => "Example 1"
+                 },
+                 { input  => [ [1,0,1],[1,1,1],[1,0,1] ],
+                   output => [ [0,0,0],[1,0,1],[0,0,0] ],
+                   label  => "Example 2"
+                 }
+             );
+
+    foreach ( @case )
     {
-        $NewMatrix[$row] = [ (0) x $N ];
+        is( zeroMatrix($_->{input}), $_->{output}, $_->{label});
     }
-    else
-    {
-        $NewMatrix[$row] = [ @{$Matrix[$row]} ];
-    }
+
+    done_testing;
 }
 
-for my $col ( 0 ..$N-1 )
+sub runBenchmark($repeat)
 {
-    if ( $zeroCol{$col} )
-    {
-        $NewMatrix[$_][$col] = 0 for 0..$M-1
-    }
-}
+    use Benchmark qw/cmpthese/;
 
-say "END WITH:"; printM(\@NewMatrix);
+    cmpthese($repeat, {
+            label => sub { },
+        });
+}
